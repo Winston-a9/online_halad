@@ -42,9 +42,9 @@
 
   <!-- ── Tabs ── -->
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('record')">✦ Record Offering</button>
-    <button class="tab-btn" onclick="switchTab('ledger')">✦ Ledger</button>
-    <button class="tab-btn" onclick="switchTab('report')">✦ Reports</button>
+    <button class="tab-btn active" onclick="switchTab('record', event)">✦ Record Offering</button>
+    <button class="tab-btn" onclick="switchTab('ledger', event)">✦ Ledger</button>
+    <button class="tab-btn" onclick="switchTab('report', event)">✦ Reports</button>
   </div>
 
   <div class="panel">
@@ -219,6 +219,7 @@
   </div>
 </div>
 
-<script src="app.js"></script>
+<!-- IMPORTANT: type="module" is required for Firebase SDK imports -->
+<script type="module" src="app.js"></script>
 </body>
 </html>

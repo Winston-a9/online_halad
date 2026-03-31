@@ -2,10 +2,11 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // All reads/writes must go through Cloud Functions (Admin SDK).
-    // Direct client access is intentionally blocked.
+    // Allow direct browser access to offerings collection
+    // Anyone can read and write — suitable for internal church use
+    // If you want to restrict, add Firebase Authentication later
     match /offerings/{docId} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }
