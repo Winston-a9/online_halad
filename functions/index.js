@@ -6,7 +6,6 @@
 const { onRequest }       = require('firebase-functions/v2/https');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
-const cors  = require('cors')({ origin: true });
 
 admin.initializeApp();
 
@@ -15,6 +14,14 @@ const COLLECTION = 'offerings';
 
 // Region closest to the Philippines
 setGlobalOptions({ region: 'asia-southeast1' });
+
+// ── CORS Helper ────────────────────────────────────────────────────
+function setCorsHeaders(res) {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Max-Age', '3600');
+}
 
 // ── Helpers ───────────────────────────────────────────────────────
 function validateOffering(body) {
@@ -40,10 +47,16 @@ function sanitize(body) {
 
 // ── Main exported Cloud Function ──────────────────────────────────
 exports.api = onRequest(async (req, res) => {
-  // Wrap everything in CORS handler
-  cors(req, res, async () => {
-    try {
-      const method = req.method;
+  // Set CORS headers on all responses
+  setCorsHeaders(res);
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+
+  try {
+    const method = req.method;
 
       // req.path will be like /offerings, /offerings/summary, /offerings/abc123
       // Strip leading slash and split
@@ -239,4 +252,3 @@ exports.api = onRequest(async (req, res) => {
       return res.status(500).json({ success: false, error: err.message });
     }
   });
-});
