@@ -1,10 +1,43 @@
 /* ================================================================
    Church Offering System — public/app.js
-   Connects to Firebase Cloud Functions API
+   Uses Firebase JS SDK v9 (modular) directly — NO Cloud Functions
+   Free Spark plan compatible ✅
    ================================================================ */
 
-// ── CONFIG — your Cloud Functions base URL ────────────────────────
-const API_BASE = 'https://asia-southeast1-online-halad.cloudfunctions.net/api';
+// ── Firebase Config — paste your own from Firebase Console ───────
+// Go to: Firebase Console → Project Settings → Your apps → SDK setup
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+  query,
+  orderBy,
+  where,
+  serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+// ── YOUR FIREBASE CONFIG ─────────────────────────────────────────
+// Replace these values with your own from Firebase Console
+// Firebase Console → Project Settings → General → Your apps → Config
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBoVUsXwp93JwlGsmY_pOcEVZNUC7XgaIs",
+  authDomain: "online-halad.firebaseapp.com",
+  projectId: "online-halad",
+  storageBucket: "online-halad.firebasestorage.app",
+  messagingSenderId: "742489102752",
+  appId: "1:742489102752:web:795400a3ba2c36326eecc5",
+  measurementId: "G-Q7F350BENE"
+};
+
+// ── Init Firebase ─────────────────────────────────────────────────
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+const COLLECTION = 'offerings';
 
 let selectedType = 'Tithe';
 
@@ -15,24 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadDailyVerse();
 });
 
-// ── API helper ────────────────────────────────────────────────────
-// BUG FIX: was building URL as `${API_BASE}/${path}` which created a
-// double-slash when path already started with 'offerings/summary' etc.
-// Now uses a clean join that trims slashes on both sides.
-async function apiFetch(path, options = {}) {
-  const url = `${API_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-  const res  = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  });
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || (data.errors || []).join(', ') || 'API error');
-  return data;
-}
-
 // ── Tab navigation ────────────────────────────────────────────────
-// BUG FIX: original used bare `event` global which is unreliable in
-// strict-mode browsers. HTML now passes the event explicitly.
 function switchTab(tab, e) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -41,6 +57,7 @@ function switchTab(tab, e) {
   if (tab === 'ledger') renderTable();
   if (tab === 'report') renderReport();
 }
+window.switchTab = switchTab;
 
 // ── Offering type selector ────────────────────────────────────────
 function selectType(el, type) {
@@ -49,6 +66,7 @@ function selectType(el, type) {
   selectedType = type;
   document.getElementById('offeringType').value = type;
 }
+window.selectType = selectType;
 
 // ── Amount preset selector ────────────────────────────────────────
 function selectAmount(el, amount) {
@@ -56,6 +74,7 @@ function selectAmount(el, amount) {
   el.classList.add('selected');
   document.getElementById('offeringAmount').value = amount;
 }
+window.selectAmount = selectAmount;
 
 // ── Formatting helpers ────────────────────────────────────────────
 function formatCurrency(val) {
@@ -80,7 +99,7 @@ async function submitOffering() {
   const ref    = document.getElementById('refNumber').value.trim();
   const notes  = document.getElementById('offeringNotes').value.trim();
 
-  if (!date)              return showToast('⚠️ Please select a date.', 'Missing Field');
+  if (!date)               return showToast('⚠️ Please select a date.', 'Missing Field');
   if (!amount || amount <= 0) return showToast('⚠️ Please enter a valid amount.', 'Missing Field');
 
   const btn = document.querySelector('#tab-record .btn-primary');
@@ -88,21 +107,33 @@ async function submitOffering() {
   btn.textContent = 'Saving…';
 
   try {
-    const result = await apiFetch('offerings', {
-      method: 'POST',
-      body: JSON.stringify({ name, date, type: selectedType, amount, method, ref, notes })
-    });
+    const data = {
+      name,
+      date,
+      type:     selectedType,
+      amount,
+      method,
+      ref:      ref   || '',
+      notes:    notes || '',
+      recorded: serverTimestamp()
+    };
+
+    const docRef = await addDoc(collection(db, COLLECTION), data);
+    console.log('✅ Saved to Firestore with ID:', docRef.id);
+
     await loadSummary();
-    showReceipt(result.data);
+    showReceipt({ id: docRef.id, ...data });
     resetForm();
     showToast('Offering recorded with gratitude.', 'Blessing Recorded ✦');
   } catch (err) {
+    console.error('❌ Firestore error:', err);
     showToast('⚠️ ' + err.message, 'Error');
   } finally {
     btn.disabled    = false;
     btn.textContent = '✦ Record Offering ✦';
   }
 }
+window.submitOffering = submitOffering;
 
 // ── Receipt modal ─────────────────────────────────────────────────
 function showReceipt(o) {
@@ -141,6 +172,7 @@ function showReceipt(o) {
 function closeModal() {
   document.getElementById('receiptModal').classList.remove('show');
 }
+window.closeModal = closeModal;
 
 // ── Reset form ────────────────────────────────────────────────────
 function resetForm() {
@@ -156,18 +188,30 @@ function resetForm() {
   selectedType = 'Tithe';
 }
 
+// ── Get all offerings from Firestore ──────────────────────────────
+async function fetchOfferings() {
+  const q        = query(collection(db, COLLECTION), orderBy('date', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 // ── Ledger table ──────────────────────────────────────────────────
 async function renderTable() {
-  const query = document.getElementById('searchInput')?.value || '';
-  const tbody = document.getElementById('offeringTable');
+  const searchQuery = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  const tbody       = document.getElementById('offeringTable');
 
   tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;opacity:.5;font-style:italic;">Loading…</td></tr>`;
 
   try {
-    const params = new URLSearchParams();
-    if (query) params.set('search', query);
-    const result    = await apiFetch('offerings?' + params.toString());
-    const offerings = result.data;
+    let offerings = await fetchOfferings();
+
+    if (searchQuery) {
+      offerings = offerings.filter(o =>
+        (o.name   || '').toLowerCase().includes(searchQuery) ||
+        (o.type   || '').toLowerCase().includes(searchQuery) ||
+        (o.method || '').toLowerCase().includes(searchQuery)
+      );
+    }
 
     if (offerings.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6">
@@ -195,23 +239,27 @@ async function renderTable() {
         </td>
       </tr>`).join('');
   } catch (err) {
+    console.error('❌ Error loading ledger:', err);
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#E88080;padding:20px;">
       Error loading records: ${err.message}
     </td></tr>`;
   }
 }
+window.renderTable = renderTable;
 
 async function deleteOffering(id) {
   if (!confirm('Remove this offering record?')) return;
   try {
-    await apiFetch(`offerings/${id}`, { method: 'DELETE' });
+    await deleteDoc(doc(db, COLLECTION, id));
     await loadSummary();
     renderTable();
     showToast('Record removed.', 'Deleted');
   } catch (err) {
+    console.error('❌ Delete error:', err);
     showToast('⚠️ ' + err.message, 'Error');
   }
 }
+window.deleteOffering = deleteOffering;
 
 // ── Reports ───────────────────────────────────────────────────────
 async function renderReport() {
@@ -219,15 +267,19 @@ async function renderReport() {
   chartEl.innerHTML = `<p style="text-align:center;opacity:.5;font-style:italic;">Loading…</p>`;
 
   try {
-    const result = await apiFetch('offerings/summary');
-    const { byType, overall } = result.data;
+    const offerings = await fetchOfferings();
+    const types     = ['Tithe', 'Offering', 'Mission', 'Building', 'Special'];
+    const colors    = ['#E88080', '#C9A84C', '#80B0E8', '#90E880', '#E880DC'];
+    const totals    = {};
+    types.forEach(t => (totals[t] = 0));
 
-    const types  = ['Tithe', 'Offering', 'Mission', 'Building', 'Special'];
-    const colors = ['#E88080', '#C9A84C', '#80B0E8', '#90E880', '#E880DC'];
-    const totals = {};
-    types.forEach(t => (totals[t] = byType[t] || 0));
+    offerings.forEach(o => {
+      const key = o.type === 'Building Fund' ? 'Building' : o.type;
+      if (totals[key] !== undefined) totals[key] += o.amount;
+    });
 
-    const max = Math.max(...Object.values(totals), 1);
+    const overall = Object.values(totals).reduce((s, v) => s + v, 0);
+    const max     = Math.max(...Object.values(totals), 1);
 
     chartEl.innerHTML = types.map((t, i) => {
       const pct = Math.round((totals[t] / max) * 100);
@@ -266,17 +318,32 @@ async function renderReport() {
     chartEl.innerHTML = `<p style="color:#E88080;text-align:center;">Error loading report: ${err.message}</p>`;
   }
 }
+window.renderReport = renderReport;
 
 // ── Summary dashboard ─────────────────────────────────────────────
 async function loadSummary() {
   try {
-    const result = await apiFetch('offerings/summary');
-    const { todayTotal, monthTotal, overall, count } = result.data;
+    const offerings = await fetchOfferings();
+    const today     = new Date().toISOString().slice(0, 10);
+    const thisMonth = today.slice(0, 7);
+
+    const todayTotal = offerings
+      .filter(o => o.date === today)
+      .reduce((s, o) => s + o.amount, 0);
+
+    const monthTotal = offerings
+      .filter(o => String(o.date).startsWith(thisMonth))
+      .reduce((s, o) => s + o.amount, 0);
+
+    const overall = offerings.reduce((s, o) => s + o.amount, 0);
+
     document.getElementById('totalToday').textContent   = formatCurrency(todayTotal);
     document.getElementById('totalMonth').textContent   = formatCurrency(monthTotal);
-    document.getElementById('totalCount').textContent   = count;
+    document.getElementById('totalCount').textContent   = offerings.length;
     document.getElementById('totalOverall').textContent = formatCurrency(overall);
-  } catch (_) { /* silently fail */ }
+  } catch (err) {
+    console.error('❌ Summary error:', err);
+  }
 }
 
 // ── Toast notification ────────────────────────────────────────────
@@ -291,8 +358,7 @@ function showToast(msg, title = 'Notice') {
 // ── CSV Export ────────────────────────────────────────────────────
 async function exportCSV() {
   try {
-    const result    = await apiFetch('offerings');
-    const offerings = result.data;
+    const offerings = await fetchOfferings();
     if (offerings.length === 0) return showToast('No records to export.', 'Empty');
 
     const headers = ['Date', 'Donor', 'Type', 'Amount', 'Method', 'Reference', 'Notes'];
@@ -312,6 +378,7 @@ async function exportCSV() {
     showToast('⚠️ Export failed: ' + err.message, 'Error');
   }
 }
+window.exportCSV = exportCSV;
 
 // ── Bible Verse of the Day ────────────────────────────────────────
 const VERSE_REFERENCES = [
