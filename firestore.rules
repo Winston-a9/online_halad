@@ -2,8 +2,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Only Cloud Functions (admin SDK) can read/write offerings
-    // Direct client access is blocked — all requests must go through the API
+    // All reads/writes must go through Cloud Functions (Admin SDK).
+    // Direct client access is intentionally blocked.
     match /offerings/{docId} {
       allow read, write: if false;
     }

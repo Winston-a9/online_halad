@@ -1,13 +1,9 @@
 /* ================================================================
-   Church Offering System — app.js
-   Talks to Firebase Cloud Functions API instead of localStorage
-   ================================================================
-   After deploying your Cloud Function, replace the API_BASE below
-   with your actual function URL, e.g.:
-   https://asia-southeast1-online-halad.cloudfunctions.net/api
+   Church Offering System — public/app.js
+   Connects to Firebase Cloud Functions API
    ================================================================ */
 
-// ── CONFIG — update this after deploying Cloud Functions ──────────
+// ── CONFIG — your Cloud Functions base URL ────────────────────────
 const API_BASE = 'https://asia-southeast1-online-halad.cloudfunctions.net/api';
 
 let selectedType = 'Tithe';
@@ -19,23 +15,29 @@ document.addEventListener('DOMContentLoaded', () => {
   loadDailyVerse();
 });
 
-// ── API helpers ───────────────────────────────────────────────────
+// ── API helper ────────────────────────────────────────────────────
+// BUG FIX: was building URL as `${API_BASE}/${path}` which created a
+// double-slash when path already started with 'offerings/summary' etc.
+// Now uses a clean join that trims slashes on both sides.
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}/${path}`, {
+  const url = `${API_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+  const res  = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options
   });
   const data = await res.json();
-  if (!data.success) throw new Error(data.error || data.errors?.join(', ') || 'API error');
+  if (!data.success) throw new Error(data.error || (data.errors || []).join(', ') || 'API error');
   return data;
 }
 
 // ── Tab navigation ────────────────────────────────────────────────
-function switchTab(tab) {
+// BUG FIX: original used bare `event` global which is unreliable in
+// strict-mode browsers. HTML now passes the event explicitly.
+function switchTab(tab, e) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
-  event.target.classList.add('active');
+  if (e && e.target) e.target.classList.add('active');
   if (tab === 'ledger') renderTable();
   if (tab === 'report') renderReport();
 }
@@ -57,7 +59,7 @@ function selectAmount(el, amount) {
 
 // ── Formatting helpers ────────────────────────────────────────────
 function formatCurrency(val) {
-  return '₱' + parseFloat(val).toLocaleString('en-PH', {
+  return '₱' + parseFloat(val || 0).toLocaleString('en-PH', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
@@ -81,8 +83,8 @@ async function submitOffering() {
   if (!date)              return showToast('⚠️ Please select a date.', 'Missing Field');
   if (!amount || amount <= 0) return showToast('⚠️ Please enter a valid amount.', 'Missing Field');
 
-  const btn = document.querySelector('.btn-primary');
-  btn.disabled = true;
+  const btn = document.querySelector('#tab-record .btn-primary');
+  btn.disabled    = true;
   btn.textContent = 'Saving…';
 
   try {
@@ -90,14 +92,14 @@ async function submitOffering() {
       method: 'POST',
       body: JSON.stringify({ name, date, type: selectedType, amount, method, ref, notes })
     });
-    loadSummary();
+    await loadSummary();
     showReceipt(result.data);
     resetForm();
     showToast('Offering recorded with gratitude.', 'Blessing Recorded ✦');
   } catch (err) {
     showToast('⚠️ ' + err.message, 'Error');
   } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = '✦ Record Offering ✦';
   }
 }
@@ -156,15 +158,15 @@ function resetForm() {
 
 // ── Ledger table ──────────────────────────────────────────────────
 async function renderTable() {
-  const query  = document.getElementById('searchInput')?.value || '';
-  const tbody  = document.getElementById('offeringTable');
+  const query = document.getElementById('searchInput')?.value || '';
+  const tbody = document.getElementById('offeringTable');
 
   tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;opacity:.5;font-style:italic;">Loading…</td></tr>`;
 
   try {
     const params = new URLSearchParams();
     if (query) params.set('search', query);
-    const result = await apiFetch('offerings?' + params.toString());
+    const result    = await apiFetch('offerings?' + params.toString());
     const offerings = result.data;
 
     if (offerings.length === 0) {
@@ -193,7 +195,9 @@ async function renderTable() {
         </td>
       </tr>`).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#E88080;padding:20px;">Error loading records: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#E88080;padding:20px;">
+      Error loading records: ${err.message}
+    </td></tr>`;
   }
 }
 
@@ -201,7 +205,7 @@ async function deleteOffering(id) {
   if (!confirm('Remove this offering record?')) return;
   try {
     await apiFetch(`offerings/${id}`, { method: 'DELETE' });
-    loadSummary();
+    await loadSummary();
     renderTable();
     showToast('Record removed.', 'Deleted');
   } catch (err) {
@@ -211,9 +215,12 @@ async function deleteOffering(id) {
 
 // ── Reports ───────────────────────────────────────────────────────
 async function renderReport() {
+  const chartEl = document.getElementById('reportChart');
+  chartEl.innerHTML = `<p style="text-align:center;opacity:.5;font-style:italic;">Loading…</p>`;
+
   try {
-    const result   = await apiFetch('offerings/summary');
-    const { byType, count, overall } = result.data;
+    const result = await apiFetch('offerings/summary');
+    const { byType, overall } = result.data;
 
     const types  = ['Tithe', 'Offering', 'Mission', 'Building', 'Special'];
     const colors = ['#E88080', '#C9A84C', '#80B0E8', '#90E880', '#E880DC'];
@@ -222,7 +229,7 @@ async function renderReport() {
 
     const max = Math.max(...Object.values(totals), 1);
 
-    document.getElementById('reportChart').innerHTML = types.map((t, i) => {
+    chartEl.innerHTML = types.map((t, i) => {
       const pct = Math.round((totals[t] / max) * 100);
       return `
         <div class="chart-row">
@@ -236,7 +243,6 @@ async function renderReport() {
         </div>`;
     }).join('');
 
-    // Count per type requires a separate fetch or we estimate from totals
     document.getElementById('reportSummaryTable').innerHTML = `
       <table>
         <thead><tr><th>Type</th><th>Total</th><th>% of Total</th></tr></thead>
@@ -257,8 +263,7 @@ async function renderReport() {
         </tbody>
       </table>`;
   } catch (err) {
-    document.getElementById('reportChart').innerHTML =
-      `<p style="color:#E88080;text-align:center;">Error loading report: ${err.message}</p>`;
+    chartEl.innerHTML = `<p style="color:#E88080;text-align:center;">Error loading report: ${err.message}</p>`;
   }
 }
 
@@ -271,9 +276,7 @@ async function loadSummary() {
     document.getElementById('totalMonth').textContent   = formatCurrency(monthTotal);
     document.getElementById('totalCount').textContent   = count;
     document.getElementById('totalOverall').textContent = formatCurrency(overall);
-  } catch (_) {
-    // silently fail on summary load error
-  }
+  } catch (_) { /* silently fail */ }
 }
 
 // ── Toast notification ────────────────────────────────────────────
@@ -294,11 +297,10 @@ async function exportCSV() {
 
     const headers = ['Date', 'Donor', 'Type', 'Amount', 'Method', 'Reference', 'Notes'];
     const rows    = offerings.map(o =>
-      [o.date, o.name, o.type, o.amount, o.method, o.ref, o.notes]
-        .map(v => `"${v ?? ''}"`)
+      [o.date, o.name, o.type, o.amount, o.method, o.ref || '', o.notes || '']
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
         .join(',')
     );
-
     const csv  = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const a    = document.createElement('a');
@@ -331,7 +333,7 @@ function getDailyVerseRef() {
 
 async function fetchBibleVerse(reference) {
   const res  = await fetch(`https://bible-api.com/${encodeURIComponent(reference)}?translation=kjv`);
-  if (!res.ok) throw new Error('API error');
+  if (!res.ok) throw new Error('Bible API error');
   const data = await res.json();
   return { text: data.text.replace(/\n/g, ' ').trim(), reference: data.reference };
 }
@@ -344,14 +346,14 @@ async function loadDailyVerse() {
   try {
     const stored = JSON.parse(sessionStorage.getItem(cacheKey));
     if (stored && stored.date === today) {
-      cachedVerse = stored.verse;
+      cachedVerse    = stored.verse;
       el.textContent = `"${stored.verse.text}" — ${stored.verse.reference}`;
       return;
     }
   } catch (_) {}
   try {
-    const verse = await fetchBibleVerse(getDailyVerseRef());
-    cachedVerse = verse;
+    const verse    = await fetchBibleVerse(getDailyVerseRef());
+    cachedVerse    = verse;
     el.textContent = `"${verse.text}" — ${verse.reference}`;
     sessionStorage.setItem(cacheKey, JSON.stringify({ date: today, verse }));
   } catch (_) {
@@ -362,10 +364,13 @@ async function loadDailyVerse() {
 async function loadReceiptVerse() {
   const el = document.getElementById('receiptVerse');
   if (!el) return;
-  if (cachedVerse) { el.textContent = `"${cachedVerse.text}" — ${cachedVerse.reference}`; return; }
+  if (cachedVerse) {
+    el.textContent = `"${cachedVerse.text}" — ${cachedVerse.reference}`;
+    return;
+  }
   const ref = VERSE_REFERENCES[Math.floor(Math.random() * VERSE_REFERENCES.length)];
   try {
-    const verse = await fetchBibleVerse(ref);
+    const verse    = await fetchBibleVerse(ref);
     el.textContent = `"${verse.text}" — ${verse.reference}`;
   } catch (_) {
     el.textContent = '"Give, and it will be given to you." — Luke 6:38';

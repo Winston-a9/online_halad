@@ -2,9 +2,7 @@
   "name": "church-offering-functions",
   "description": "Church Offering System — Firebase Cloud Functions",
   "scripts": {
-    "serve": "firebase emulators:start --only functions",
-    "shell": "firebase functions:shell",
-    "start": "npm run shell",
+    "serve": "firebase emulators:start --only functions,firestore",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
