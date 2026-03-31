@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Church Offering System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ── Header ── -->
+  <header>
+    <span class="cross-ornament">✝</span>
+    <div class="church-name">Grace Community Church</div>
+    <h1>Offering System</h1>
+    <div class="divider"><span>✦</span></div>
+    <p class="verse" id="dailyVerse">Loading verse of the day…</p>
+  </header>
+
+  <!-- ── Summary Cards ── -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <span class="amount" id="totalToday">₱0.00</span>
+      <span class="label">Today's Total</span>
+    </div>
+    <div class="summary-card">
+      <span class="amount" id="totalMonth">₱0.00</span>
+      <span class="label">This Month</span>
+    </div>
+    <div class="summary-card">
+      <span class="amount" id="totalCount">0</span>
+      <span class="label">Offerings Given</span>
+    </div>
+    <div class="summary-card">
+      <span class="amount" id="totalOverall">₱0.00</span>
+      <span class="label">All Time Total</span>
+    </div>
+  </div>
+
+  <!-- ── Tabs ── -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('record')">✦ Record Offering</button>
+    <button class="tab-btn" onclick="switchTab('ledger')">✦ Ledger</button>
+    <button class="tab-btn" onclick="switchTab('report')">✦ Reports</button>
+  </div>
+
+  <div class="panel">
+
+    <!-- ════ TAB: Record Offering ════ -->
+    <div class="tab-content active" id="tab-record">
+      <h2 class="section-title">Record an Offering</h2>
+      <p class="section-subtitle">Enter the details of the offering received</p>
+
+      <div class="form-grid">
+
+        <div class="form-group">
+          <label for="donorName">Donor Name</label>
+          <input type="text" id="donorName" placeholder="Full name (or Anonymous)">
+        </div>
+
+        <div class="form-group">
+          <label for="offeringDate">Date</label>
+          <input type="date" id="offeringDate">
+        </div>
+
+        <div class="form-group full">
+          <label>Offering Type</label>
+          <div class="offering-types">
+            <div class="type-card selected" onclick="selectType(this, 'Tithe')">
+              <div class="icon">🕊️</div>
+              <div class="name">Tithe</div>
+            </div>
+            <div class="type-card" onclick="selectType(this, 'Offering')">
+              <div class="icon">🙏</div>
+              <div class="name">Offering</div>
+            </div>
+            <div class="type-card" onclick="selectType(this, 'Mission')">
+              <div class="icon">✝️</div>
+              <div class="name">Mission</div>
+            </div>
+            <div class="type-card" onclick="selectType(this, 'Building')">
+              <div class="icon">⛪</div>
+              <div class="name">Building Fund</div>
+            </div>
+            <div class="type-card" onclick="selectType(this, 'Special')">
+              <div class="icon">⭐</div>
+              <div class="name">Special</div>
+            </div>
+          </div>
+          <input type="hidden" id="offeringType" value="Tithe">
+        </div>
+
+        <div class="form-group full">
+          <label>Amount (₱)</label>
+          <div class="amount-grid">
+            <button class="amount-btn" onclick="selectAmount(this, 50)">₱50</button>
+            <button class="amount-btn" onclick="selectAmount(this, 100)">₱100</button>
+            <button class="amount-btn" onclick="selectAmount(this, 200)">₱200</button>
+            <button class="amount-btn" onclick="selectAmount(this, 500)">₱500</button>
+            <button class="amount-btn" onclick="selectAmount(this, 1000)">₱1,000</button>
+            <button class="amount-btn" onclick="selectAmount(this, 2000)">₱2,000</button>
+          </div>
+          <input type="number" id="offeringAmount" placeholder="Or enter custom amount" min="0" step="0.01">
+        </div>
+
+        <div class="form-group">
+          <label for="paymentMethod">Payment Method</label>
+          <select id="paymentMethod">
+            <option value="Cash">Cash</option>
+            <option value="GCash">GCash</option>
+            <option value="Maya">Maya</option>
+            <option value="Bank Transfer">Bank Transfer</option>
+            <option value="Check">Check</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="refNumber">Reference No. (optional)</label>
+          <input type="text" id="refNumber" placeholder="e.g. GCash transaction ID">
+        </div>
+
+        <div class="form-group full">
+          <label for="offeringNotes">Notes</label>
+          <textarea id="offeringNotes" rows="2" placeholder="Any notes or special intentions..."></textarea>
+        </div>
+
+      </div><!-- /form-grid -->
+
+      <button class="btn-primary" onclick="submitOffering()">✦ Record Offering ✦</button>
+    </div><!-- /tab-record -->
+
+
+    <!-- ════ TAB: Ledger ════ -->
+    <div class="tab-content" id="tab-ledger">
+      <div class="records-header">
+        <div>
+          <h2 class="section-title">Offering Ledger</h2>
+          <p class="section-subtitle">All recorded offerings</p>
+        </div>
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Search donor or type..." oninput="renderTable()">
+          <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Donor</th>
+              <th>Type</th>
+              <th>Method</th>
+              <th>Amount</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="offeringTable">
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <div class="icon">🕊️</div>
+                  <p>No offerings recorded yet.</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div><!-- /tab-ledger -->
+
+
+    <!-- ════ TAB: Reports ════ -->
+    <div class="tab-content" id="tab-report">
+      <h2 class="section-title">Financial Reports</h2>
+      <p class="section-subtitle">Overview by offering type</p>
+
+      <div class="chart-container">
+        <div class="chart-bar-wrap" id="reportChart">
+          <p style="color:rgba(250,246,238,0.35); font-style:italic; text-align:center;">
+            No data to display yet.
+          </p>
+        </div>
+      </div>
+
+      <div id="reportSummaryTable" style="margin-top: 20px;"></div>
+    </div><!-- /tab-report -->
+
+  </div><!-- /panel -->
+</div><!-- /container -->
+
+
+<!-- ── Receipt Modal ── -->
+<div class="modal-overlay" id="receiptModal">
+  <div class="modal">
+    <div style="text-align:center; margin-bottom:16px;">
+      <span style="font-size:2rem; color:var(--gold);">✝</span>
+      <h2>Offering Receipt</h2>
+      <p style="font-style:italic; color:rgba(250,246,238,0.45); font-size:0.85rem;">
+        Thank you for your faithful giving
+      </p>
+    </div>
+    <div id="receiptContent"></div>
+    <div id="receiptVerse" style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(201,168,76,0.2); text-align:center; font-style:italic; color:rgba(250,246,238,0.55); font-size:0.85rem; font-family:'EB Garamond',serif; line-height:1.5;"></div>
+    <button class="btn-primary" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+
+<!-- ── Toast Notification ── -->
+<div class="toast" id="toast">
+  <span class="toast-icon">✝️</span>
+  <div>
+    <div class="toast-title" id="toastTitle">Success</div>
+    <div class="toast-text" id="toastText"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
